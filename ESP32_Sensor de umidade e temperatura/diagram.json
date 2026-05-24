@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "author": "IRVING EDUARDO CELEDON SANCHEZ",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-c3-devkitm-1",
+      "id": "esp",
+      "top": -9.9,
+      "left": 121.02,
+      "attrs": { "env": "micropython-20231227-v1.22.0" }
+    },
+    { "type": "wokwi-dht22", "id": "dht1", "top": -162.9, "left": 292.2, "attrs": {} },
+    {
+      "type": "wokwi-led",
+      "id": "led1",
+      "top": -3.6,
+      "left": -73,
+      "attrs": { "color": "limegreen" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led2",
+      "top": 97.6,
+      "left": 397.8,
+      "rotate": 180,
+      "attrs": { "color": "red" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r1",
+      "top": 32.75,
+      "left": 9.6,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r2",
+      "top": 99.95,
+      "left": 259.2,
+      "attrs": { "value": "220" }
+    }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "esp:GND.10", "dht1:GND", "black", [ "h46.72" ] ],
+    [ "esp:5", "dht1:SDA", "red", [ "h17.92" ] ],
+    [ "esp:3V3.1", "dht1:VCC", "white", [ "h-19.2", "v-48", "h124.8" ] ],
+    [ "esp:2", "r1:2", "green", [ "h0" ] ],
+    [ "r1:1", "led1:A", "green", [ "v0" ] ],
+    [ "led1:C", "esp:GND.5", "cyan", [ "v0" ] ],
+    [ "esp:4", "r2:1", "gold", [ "v0" ] ],
+    [ "r2:2", "led2:A", "gold", [ "v0" ] ],
+    [ "led2:C", "esp:GND.6", "cyan", [ "v0", "h86", "v38.4" ] ]
+  ],
+  "dependencies": {}
+}
