@@ -1,27 +1,15 @@
-""" 
-Importação da bibliotecas necessarias para a conexão:
-    - Conectar a internet (network)
-    - Obter data e hora (time)
-    - Ler os dados do sensor DHT22 (dht) conectado em um pin especifico (Pin)
-    - Usar o protocolo MQTT (umqtt)
-"""
 import network
 import time
 import dht
 from umqtt.simple import MQTTClient
 from machine import Pin
-
+import random  # <-- função de randomização da temperatura para testes
 
 # --- Configuração dos LEDs ---
-led_green = Pin(2, Pin.OUT)  # Aceito
-led_red   = Pin(4, Pin.OUT)  # Rejeitado
+led_green = Pin(2, Pin.OUT)
+led_red   = Pin(4, Pin.OUT)
 
 def set_led(accepted: bool):
-    """
-    Acende o LED correspondente por 3 segundos e apaga ambos em seguida.
-    - Verde (pino 2): requisição aceita
-    - Vermelho (pino 4): requisição rejeitada
-    """
     if accepted:
         led_green.value(1)
         led_red.value(0)
@@ -37,12 +25,6 @@ def set_led(accepted: bool):
 
 
 def on_message(topic, msg):
-    """
-    Callback chamado automaticamente quando o ESP32 recebe uma mensagem
-    no tópico assinado (DHT22_response).
-    
-    Espera receber: b"On" ou b"Off"
-    """
     print("Response received on [{}]: {}".format(topic.decode(), msg.decode()))
     
     if msg == b"ON":
@@ -50,7 +32,6 @@ def on_message(topic, msg):
     elif msg == b"OFF":
         set_led(accepted=False)
     else:
-        # Resposta inesperada: pisca os dois LEDs como aviso
         print("[LED] Unknown response — blinking both LEDs")
         for _ in range(3):
             led_green.value(1)
@@ -62,10 +43,6 @@ def on_message(topic, msg):
 
 
 def connect_wifi():
-    """
-    Esta função inclui tudo o que é necessário para conectar-se à rede Wi-Fi Wokwi.
-    Imprime um ponto (.) até que a conexão seja estabelecida.
-    """
     print("Connecting Wi-Fi", end="")
     sta_if = network.WLAN(network.STA_IF)
     sta_if.active(True)
@@ -79,10 +56,6 @@ def connect_wifi():
 
 
 def connect_mqtt_server():
-    """
-    Conecta ao servidor MQTT com as credenciais do HiveMQ,
-    registra o callback de mensagens e assina o tópico de resposta.
-    """
     print("\nConnecting to MQTT server", end="")
     client = MQTTClient(
         client_id=b"100",
@@ -94,11 +67,8 @@ def connect_mqtt_server():
         ssl_params={"server_hostname": "420fea555ede4bd4a100b1da5ef2a840.s1.eu.hivemq.cloud"}
     )
 
-    # Registra a função que será chamada ao receber mensagens
     client.set_callback(on_message)
     client.connect()
-
-    # Assina o tópico onde o HiveMQ envia a resposta
     client.subscribe(b"irrigacao/comando")
     print(". . .Successful connection!")
     print("Subscribed to [irrigacao/comando]")
@@ -106,45 +76,67 @@ def connect_mqtt_server():
     return client
 
 
+def read_sensor(dht22, last_temp, last_hum):
+    """
+    Tenta ler o sensor DHT22. Se falhar, aplica uma variação
+    aleatória pequena sobre a última leitura válida.
+    Sempre adiciona um ruído suave para simular variações reais.
+    
+    Faixas realistas para lavoura:
+      - Temperatura: 18°C a 38°C
+      - Umidade:     30% a 95%
+    """
+    try:
+        dht22.measure()
+        temp = dht22.temperature()
+        hum  = dht22.humidity()
+    except Exception:
+        temp = last_temp
+        hum  = last_hum
+
+    # Variação aleatória suave a cada leitura (±0.5°C e ±1.5%)
+    temp += random.uniform(-0.5, 0.5)
+    hum  += random.uniform(-1.5, 1.5)
+
+    # Mantém dentro de faixas realistas
+    temp = max(18.0, min(38.0, temp))
+    hum  = max(30.0, min(95.0, hum))
+
+    # Arredonda para 1 casa decimal
+    return round(temp, 1), round(hum, 1)
+
+
 def main():
-    """
-    Encapsulamento do fluxo padrão do sistema IoT.
-    Os dados do sensor DHT22 são lidos a cada 10 segundos,
-    enviados ao HiveMQ, e a resposta é aguardada via check_msg().
-    """
     connect_wifi()
     mqtt_client = connect_mqtt_server()
 
     dht22 = dht.DHT22(Pin(5))
 
-    last_temp = 0.0
-    last_hum  = 0.0
+    # Valores iniciais realistas como ponto de partida
+    last_temp = round(random.uniform(22.0, 30.0), 1)
+    last_hum  = round(random.uniform(50.0, 80.0), 1)
 
     while True:
+        temp, hum = read_sensor(dht22, last_temp, last_hum)
+
+        message = "DHT22,id=100 temperature={},humidity={}".format(temp, hum)
+        print("Envio de dados para Requisição: " + message)
+
         try:
-            dht22.measure()
-            temp = dht22.temperature()
-            hum  = dht22.humidity()
-
-            message = "DHT22,id=100 temperature = {},humidity = {}".format(temp, hum)
-            print("Envio de dados para Requisição :" + message)
             mqtt_client.publish(b"irrigacao/sensores", message)
-
-            last_temp = temp
-            last_hum  = hum
-
         except Exception as e:
-            print("Erro na leitura ou envio dos dados :", e)
+            print("Erro no envio MQTT:", e)
 
-        # Verifica mensagens recebidas durante os 10 segundos de espera
-        # check_msg() é não-bloqueante: retorna imediatamente se não há nada
+        last_temp = temp
+        last_hum  = hum
+
         deadline = time.time() + 10
         while time.time() < deadline:
             try:
-                mqtt_client.check_msg()  # Dispara on_message() se houver resposta
+                mqtt_client.check_msg()
             except Exception as e:
                 print("Error checking MQTT messages:", e)
-            time.sleep(0.2)  # Pequena pausa para não sobrecarregar o loop
+            time.sleep(0.2)
 
 
 if __name__ == "__main__":
