@@ -9,7 +9,11 @@ import random  # <-- função de randomização da temperatura para testes
 led_green = Pin(2, Pin.OUT)
 led_red   = Pin(4, Pin.OUT)
 
+led_red.value(1)
+
 def set_led(accepted: bool):
+
+
     if accepted:
         led_green.value(1)
         led_red.value(0)
@@ -18,10 +22,6 @@ def set_led(accepted: bool):
         led_green.value(0)
         led_red.value(1)
         print("[LED] RED - Rejected")
-    
-    time.sleep(3)
-    led_green.value(0)
-    led_red.value(0)
 
 
 def on_message(topic, msg):
